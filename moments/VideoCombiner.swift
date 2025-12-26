@@ -27,9 +27,18 @@ enum VideoCombinerError: LocalizedError {
     }
 }
 
-struct VideoSegmentInfo {
+struct VideoClip {
     let url: URL
-    let duration: CMTime
+    let trimStart: TimeInterval
+    let trimEnd: TimeInterval
+
+    var duration: TimeInterval {
+        trimEnd - trimStart
+    }
+}
+
+struct VideoSegmentInfo {
+    let clip: VideoClip
     let naturalSize: CGSize
     let preferredTransform: CGAffineTransform
     let displaySize: CGSize
@@ -42,8 +51,8 @@ class VideoCombiner: ObservableObject {
     @Published var errorMessage: String?
     @Published var isComplete = false
 
-    func combineVideos(urls: [URL]) async throws {
-        guard !urls.isEmpty else {
+    func combineVideos(clips: [VideoClip]) async throws {
+        guard !clips.isEmpty else {
             throw VideoCombinerError.noVideosProvided
         }
 
@@ -58,10 +67,9 @@ class VideoCombiner: ObservableObject {
 
         // First pass: gather info about all videos
         var segments: [VideoSegmentInfo] = []
-        for url in urls {
-            let asset = AVURLAsset(url: url)
+        for clip in clips {
+            let asset = AVURLAsset(url: clip.url)
             do {
-                let duration = try await asset.load(.duration)
                 let videoTracks = try await asset.loadTracks(withMediaType: .video)
 
                 guard let videoTrack = videoTracks.first else {
@@ -79,14 +87,13 @@ class VideoCombiner: ObservableObject {
                 )
 
                 segments.append(VideoSegmentInfo(
-                    url: url,
-                    duration: duration,
+                    clip: clip,
                     naturalSize: naturalSize,
                     preferredTransform: preferredTransform,
                     displaySize: displaySize
                 ))
             } catch {
-                throw VideoCombinerError.failedToLoadAsset(url)
+                throw VideoCombinerError.failedToLoadAsset(clip.url)
             }
         }
 
@@ -122,11 +129,15 @@ class VideoCombiner: ObservableObject {
         let totalVideos = Double(segments.count)
 
         for (index, segment) in segments.enumerated() {
-            let asset = AVURLAsset(url: segment.url)
+            let asset = AVURLAsset(url: segment.clip.url)
             let videoTracks = try await asset.loadTracks(withMediaType: .video)
             let audioTracks = try await asset.loadTracks(withMediaType: .audio)
 
-            let timeRange = CMTimeRange(start: .zero, duration: segment.duration)
+            // Calculate the time range based on trim points
+            let trimStartTime = CMTime(seconds: segment.clip.trimStart, preferredTimescale: 600)
+            let trimEndTime = CMTime(seconds: segment.clip.trimEnd, preferredTimescale: 600)
+            let trimDuration = CMTimeSubtract(trimEndTime, trimStartTime)
+            let timeRange = CMTimeRange(start: trimStartTime, duration: trimDuration)
 
             if let assetVideoTrack = videoTracks.first {
                 try compositionVideoTrack.insertTimeRange(timeRange, of: assetVideoTrack, at: currentTime)
@@ -143,7 +154,7 @@ class VideoCombiner: ObservableObject {
                 layerInstruction.setTransform(transform, at: currentTime)
 
                 let instruction = AVMutableVideoCompositionInstruction()
-                instruction.timeRange = CMTimeRange(start: currentTime, duration: segment.duration)
+                instruction.timeRange = CMTimeRange(start: currentTime, duration: trimDuration)
                 instruction.layerInstructions = [layerInstruction]
                 videoInstructions.append(instruction)
             }
@@ -152,7 +163,7 @@ class VideoCombiner: ObservableObject {
                 try compositionAudioTrack.insertTimeRange(timeRange, of: assetAudioTrack, at: currentTime)
             }
 
-            currentTime = CMTimeAdd(currentTime, segment.duration)
+            currentTime = CMTimeAdd(currentTime, trimDuration)
             progress = Double(index + 1) / totalVideos * 0.5
         }
 

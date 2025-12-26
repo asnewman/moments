@@ -2,11 +2,28 @@ import SwiftUI
 import PhotosUI
 import AVKit
 
+extension Int: @retroactive Identifiable {
+    public var id: Int { self }
+}
+
 struct VideoItem: Identifiable {
     let id = UUID()
     let url: URL
     var thumbnail: UIImage?
-    let duration: TimeInterval
+    let originalDuration: TimeInterval
+    var trimStart: TimeInterval = 0
+    var trimEnd: TimeInterval
+
+    var trimmedDuration: TimeInterval {
+        trimEnd - trimStart
+    }
+
+    init(url: URL, thumbnail: UIImage?, duration: TimeInterval) {
+        self.url = url
+        self.thumbnail = thumbnail
+        self.originalDuration = duration
+        self.trimEnd = duration
+    }
 }
 
 struct ContentView: View {
@@ -16,6 +33,7 @@ struct ContentView: View {
     @State private var isLoading = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
+    @State private var editingVideoIndex: Int?
 
     var body: some View {
         NavigationStack {
@@ -45,6 +63,22 @@ struct ContentView: View {
             .overlay {
                 if isLoading || videoCombiner.isProcessing {
                     loadingOverlay
+                }
+            }
+            .sheet(item: $editingVideoIndex) { index in
+                if index < videoItems.count {
+                    VideoTrimmerView(
+                        videoURL: videoItems[index].url,
+                        originalDuration: videoItems[index].originalDuration,
+                        trimStart: Binding(
+                            get: { videoItems[index].trimStart },
+                            set: { videoItems[index].trimStart = $0 }
+                        ),
+                        trimEnd: Binding(
+                            get: { videoItems[index].trimEnd },
+                            set: { videoItems[index].trimEnd = $0 }
+                        )
+                    )
                 }
             }
         }
@@ -82,41 +116,57 @@ struct ContentView: View {
 
             List {
                 ForEach(Array(videoItems.enumerated()), id: \.element.id) { index, item in
-                    HStack(spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .frame(width: 24, height: 24)
-                            .background(Color.accentColor)
-                            .foregroundColor(.white)
-                            .clipShape(Circle())
-
-                        if let thumbnail = item.thumbnail {
-                            Image(uiImage: thumbnail)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 60, height: 40)
-                                .clipped()
-                                .cornerRadius(6)
-                        } else {
-                            Rectangle()
-                                .fill(Color.secondary.opacity(0.2))
-                                .frame(width: 60, height: 40)
-                                .cornerRadius(6)
-                        }
-
-                        VStack(alignment: .leading) {
-                            Text("Video \(index + 1)")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            Text(formatDuration(item.duration))
+                    Button {
+                        editingVideoIndex = index
+                    } label: {
+                        HStack(spacing: 12) {
+                            Text("\(index + 1)")
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+                                .fontWeight(.bold)
+                                .frame(width: 24, height: 24)
+                                .background(Color.accentColor)
+                                .foregroundColor(.white)
+                                .clipShape(Circle())
 
-                        Spacer()
+                            if let thumbnail = item.thumbnail {
+                                Image(uiImage: thumbnail)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 60, height: 40)
+                                    .clipped()
+                                    .cornerRadius(6)
+                            } else {
+                                Rectangle()
+                                    .fill(Color.secondary.opacity(0.2))
+                                    .frame(width: 60, height: 40)
+                                    .cornerRadius(6)
+                            }
+
+                            VStack(alignment: .leading) {
+                                Text("Video \(index + 1)")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                HStack(spacing: 4) {
+                                    Text(formatDuration(item.trimmedDuration))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                    if item.trimStart > 0 || item.trimEnd < item.originalDuration {
+                                        Image(systemName: "scissors")
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
+                                }
+                            }
+
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 4)
                     }
-                    .padding(.vertical, 4)
+                    .buttonStyle(.plain)
                 }
                 .onMove(perform: moveItems)
                 .onDelete(perform: deleteItems)
@@ -211,7 +261,7 @@ struct ContentView: View {
     }
 
     private var totalDuration: TimeInterval {
-        videoItems.reduce(0) { $0 + $1.duration }
+        videoItems.reduce(0) { $0 + $1.trimmedDuration }
     }
 
     private func loadVideos(from items: [PhotosPickerItem]) async {
@@ -262,8 +312,14 @@ struct ContentView: View {
 
         Task {
             do {
-                let urls = videoItems.map { $0.url }
-                try await videoCombiner.combineVideos(urls: urls)
+                let clips = videoItems.map { item in
+                    VideoClip(
+                        url: item.url,
+                        trimStart: item.trimStart,
+                        trimEnd: item.trimEnd
+                    )
+                }
+                try await videoCombiner.combineVideos(clips: clips)
                 alertMessage = "Videos combined successfully and saved to your photo library!"
                 showingAlert = true
             } catch {
