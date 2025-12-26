@@ -51,7 +51,7 @@ class VideoCombiner: ObservableObject {
     @Published var errorMessage: String?
     @Published var isComplete = false
 
-    func combineVideos(clips: [VideoClip]) async throws {
+    func createCombinedVideo(clips: [VideoClip]) async throws -> URL {
         guard !clips.isEmpty else {
             throw VideoCombinerError.noVideosProvided
         }
@@ -191,14 +191,12 @@ class VideoCombiner: ObservableObject {
 
         await exportSession.export()
 
-        progress = 0.75
+        progress = 1.0
 
         switch exportSession.status {
         case .completed:
-            try await saveToPhotoLibrary(url: outputURL)
-            try? FileManager.default.removeItem(at: outputURL)
-            progress = 1.0
             isComplete = true
+            return outputURL
 
         case .failed:
             let errorMsg = exportSession.error?.localizedDescription ?? "Unknown error"
@@ -258,7 +256,7 @@ class VideoCombiner: ObservableObject {
         return finalTransform
     }
 
-    private func saveToPhotoLibrary(url: URL) async throws {
+    func saveToPhotoLibrary(url: URL) async throws {
         try await PHPhotoLibrary.shared().performChanges {
             PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
         }

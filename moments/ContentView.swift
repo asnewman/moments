@@ -13,6 +13,7 @@ struct VideoItem: Identifiable {
     let originalDuration: TimeInterval
     var trimStart: TimeInterval = 0
     var trimEnd: TimeInterval
+    var assetIdentifier: String?
 
     var trimmedDuration: TimeInterval {
         trimEnd - trimStart
@@ -34,6 +35,8 @@ struct ContentView: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var editingVideoIndex: Int?
+    @State private var previewURL: URL?
+    @State private var showingPreview = false
 
     var body: some View {
         NavigationStack {
@@ -78,6 +81,15 @@ struct ContentView: View {
                             get: { videoItems[index].trimEnd },
                             set: { videoItems[index].trimEnd = $0 }
                         )
+                    )
+                }
+            }
+            .fullScreenCover(isPresented: $showingPreview) {
+                if let url = previewURL {
+                    VideoPreviewView(
+                        videoURL: url,
+                        onSave: savePreviewedVideo,
+                        onDiscard: discardPreview
                     )
                 }
             }
@@ -187,26 +199,22 @@ struct ContentView: View {
 
     private var actionButtons: some View {
         VStack(spacing: 12) {
-            PhotosPicker(
-                selection: $selectedItems,
-                maxSelectionCount: 20,
-                matching: .videos,
-                photoLibrary: .shared()
-            ) {
-                Label(
-                    videoItems.isEmpty ? "Select Videos" : "Change Selection",
-                    systemImage: "photo.on.rectangle.angled"
-                )
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.accentColor.opacity(0.1))
-                .foregroundColor(.accentColor)
-                .cornerRadius(12)
-            }
-
-            if !videoItems.isEmpty {
-                Button(action: combineVideos) {
-                    Label("Combine Videos", systemImage: "arrow.triangle.merge")
+            if videoItems.isEmpty {
+                PhotosPicker(
+                    selection: $selectedItems,
+                    matching: .videos,
+                    photoLibrary: .shared()
+                ) {
+                    Label("Select Videos", systemImage: "photo.on.rectangle.angled")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.accentColor.opacity(0.1))
+                        .foregroundColor(.accentColor)
+                        .cornerRadius(12)
+                }
+            } else {
+                Button(action: previewVideo) {
+                    Label("Preview", systemImage: "play.circle")
                         .frame(maxWidth: .infinity)
                         .padding()
                         .background(Color.accentColor)
@@ -303,7 +311,7 @@ struct ContentView: View {
         }
     }
 
-    private func combineVideos() {
+    private func previewVideo() {
         guard videoItems.count >= 2 else {
             alertMessage = "Please select at least 2 videos to combine"
             showingAlert = true
@@ -319,14 +327,40 @@ struct ContentView: View {
                         trimEnd: item.trimEnd
                     )
                 }
-                try await videoCombiner.combineVideos(clips: clips)
-                alertMessage = "Videos combined successfully and saved to your photo library!"
+                let url = try await videoCombiner.createCombinedVideo(clips: clips)
+                previewURL = url
+                showingPreview = true
+            } catch {
+                alertMessage = error.localizedDescription
+                showingAlert = true
+            }
+        }
+    }
+
+    private func savePreviewedVideo() {
+        guard let url = previewURL else { return }
+
+        Task {
+            do {
+                try await videoCombiner.saveToPhotoLibrary(url: url)
+                try? FileManager.default.removeItem(at: url)
+                previewURL = nil
+                showingPreview = false
+                alertMessage = "Video saved to your photo library!"
                 showingAlert = true
             } catch {
                 alertMessage = error.localizedDescription
                 showingAlert = true
             }
         }
+    }
+
+    private func discardPreview() {
+        if let url = previewURL {
+            try? FileManager.default.removeItem(at: url)
+        }
+        previewURL = nil
+        showingPreview = false
     }
 
     private func clearSelection() {
