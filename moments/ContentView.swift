@@ -14,16 +14,18 @@ struct VideoItem: Identifiable {
     var trimStart: TimeInterval = 0
     var trimEnd: TimeInterval
     var assetIdentifier: String?
+    var creationDate: Date?
 
     var trimmedDuration: TimeInterval {
         trimEnd - trimStart
     }
 
-    init(url: URL, thumbnail: UIImage?, duration: TimeInterval) {
+    init(url: URL, thumbnail: UIImage?, duration: TimeInterval, creationDate: Date? = nil) {
         self.url = url
         self.thumbnail = thumbnail
         self.originalDuration = duration
         self.trimEnd = duration
+        self.creationDate = creationDate
     }
 }
 

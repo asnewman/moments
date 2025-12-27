@@ -3,6 +3,13 @@ import PhotosUI
 import AVKit
 import Photos
 
+enum VideoSortOption {
+    case dateNewest
+    case dateOldest
+    case lengthShortest
+    case lengthLongest
+}
+
 struct ProjectEditorView: View {
     @Bindable var project: Project
     @Environment(\.modelContext) private var modelContext
@@ -18,6 +25,7 @@ struct ProjectEditorView: View {
     @State private var showingPreview = false
     @State private var showingRenameAlert = false
     @State private var newProjectName = ""
+    @State private var showingPhotoPicker = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -44,13 +52,40 @@ struct ProjectEditorView: View {
                         Label("Rename", systemImage: "pencil")
                     }
 
-                    PhotosPicker(
-                        selection: $selectedItems,
-                        matching: .videos,
-                        photoLibrary: .shared()
-                    ) {
+                    Button {
+                        showingPhotoPicker = true
+                    } label: {
                         Label("Add Videos", systemImage: "plus")
                     }
+
+                    Menu {
+                        Button {
+                            sortVideos(by: .dateNewest)
+                        } label: {
+                            Label("Date (Newest First)", systemImage: "calendar")
+                        }
+
+                        Button {
+                            sortVideos(by: .dateOldest)
+                        } label: {
+                            Label("Date (Oldest First)", systemImage: "calendar")
+                        }
+
+                        Button {
+                            sortVideos(by: .lengthShortest)
+                        } label: {
+                            Label("Length (Shortest First)", systemImage: "timer")
+                        }
+
+                        Button {
+                            sortVideos(by: .lengthLongest)
+                        } label: {
+                            Label("Length (Longest First)", systemImage: "timer")
+                        }
+                    } label: {
+                        Label("Sort", systemImage: "arrow.up.arrow.down")
+                    }
+                    .disabled(videoItems.count < 2)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -72,6 +107,12 @@ struct ProjectEditorView: View {
         } message: {
             Text(alertMessage)
         }
+        .photosPicker(
+            isPresented: $showingPhotoPicker,
+            selection: $selectedItems,
+            matching: .videos,
+            photoLibrary: .shared()
+        )
         .onChange(of: selectedItems) { _, newItems in
             Task {
                 await addVideos(from: newItems)
@@ -303,6 +344,8 @@ struct ProjectEditorView: View {
         let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
         guard let asset = fetchResult.firstObject else { return nil }
 
+        let creationDate = asset.creationDate
+
         return await withCheckedContinuation { continuation in
             let options = PHVideoRequestOptions()
             options.version = .current
@@ -319,7 +362,8 @@ struct ProjectEditorView: View {
                     var videoItem = VideoItem(
                         url: urlAsset.url,
                         thumbnail: thumbnail,
-                        duration: clipData.originalDuration
+                        duration: clipData.originalDuration,
+                        creationDate: creationDate
                     )
                     videoItem.trimStart = clipData.trimStart
                     videoItem.trimEnd = clipData.trimEnd
@@ -364,6 +408,8 @@ struct ProjectEditorView: View {
         let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [assetIdentifier], options: nil)
         guard let asset = fetchResult.firstObject else { return nil }
 
+        let creationDate = asset.creationDate
+
         return await withCheckedContinuation { continuation in
             let options = PHVideoRequestOptions()
             options.version = .current
@@ -382,7 +428,8 @@ struct ProjectEditorView: View {
                     var videoItem = VideoItem(
                         url: urlAsset.url,
                         thumbnail: thumbnail,
-                        duration: duration?.seconds ?? 0
+                        duration: duration?.seconds ?? 0,
+                        creationDate: creationDate
                     )
                     videoItem.assetIdentifier = assetIdentifier
                     continuation.resume(returning: videoItem)
@@ -419,6 +466,27 @@ struct ProjectEditorView: View {
         videoItems.move(fromOffsets: source, toOffset: destination)
 
         // Update order indices
+        for (index, item) in videoItems.enumerated() {
+            if let clipIndex = project.clips.firstIndex(where: { $0.assetIdentifier == item.assetIdentifier }) {
+                project.clips[clipIndex].orderIndex = index
+            }
+        }
+        project.modifiedAt = Date()
+    }
+
+    private func sortVideos(by option: VideoSortOption) {
+        switch option {
+        case .dateNewest:
+            videoItems.sort { ($0.creationDate ?? .distantPast) > ($1.creationDate ?? .distantPast) }
+        case .dateOldest:
+            videoItems.sort { ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast) }
+        case .lengthShortest:
+            videoItems.sort { $0.originalDuration < $1.originalDuration }
+        case .lengthLongest:
+            videoItems.sort { $0.originalDuration > $1.originalDuration }
+        }
+
+        // Update order indices in project.clips
         for (index, item) in videoItems.enumerated() {
             if let clipIndex = project.clips.firstIndex(where: { $0.assetIdentifier == item.assetIdentifier }) {
                 project.clips[clipIndex].orderIndex = index

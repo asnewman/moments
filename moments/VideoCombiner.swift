@@ -189,7 +189,20 @@ class VideoCombiner: ObservableObject {
         exportSession.outputFileType = .mov
         exportSession.videoComposition = videoComposition
 
+        // Monitor export progress
+        let progressTask = Task {
+            while exportSession.status == .waiting || exportSession.status == .exporting {
+                // Progress goes from 50% to 100% during export
+                let exportProgress = exportSession.progress
+                await MainActor.run {
+                    self.progress = 0.5 + Double(exportProgress) * 0.5
+                }
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
+        }
+
         await exportSession.export()
+        progressTask.cancel()
 
         progress = 1.0
 
