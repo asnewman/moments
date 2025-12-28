@@ -302,22 +302,28 @@ struct VideoPreviewView: View {
                 .progressViewStyle(.linear)
                 .tint(.white)
 
-            HStack(spacing: 24) {
+            HStack(spacing: 16) {
                 Button {
                     playbackController.skipClips(-5)
                 } label: {
-                    Image(systemName: "backward.end.fill")
-                        .font(.body)
+                    Text("-5")
+                        .font(.subheadline.bold())
                         .foregroundColor(playbackController.currentClipIndex >= 5 ? .white : .white.opacity(0.3))
+                        .frame(width: 40, height: 32)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(8)
                 }
                 .disabled(playbackController.currentClipIndex < 5)
 
                 Button {
                     playbackController.skipClips(-1)
                 } label: {
-                    Image(systemName: "backward.fill")
-                        .font(.body)
+                    Text("-1")
+                        .font(.subheadline.bold())
                         .foregroundColor(playbackController.currentClipIndex > 0 ? .white : .white.opacity(0.3))
+                        .frame(width: 40, height: 32)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(8)
                 }
                 .disabled(playbackController.currentClipIndex == 0)
 
@@ -337,18 +343,24 @@ struct VideoPreviewView: View {
                 Button {
                     playbackController.skipClips(1)
                 } label: {
-                    Image(systemName: "forward.fill")
-                        .font(.body)
+                    Text("+1")
+                        .font(.subheadline.bold())
                         .foregroundColor(playbackController.currentClipIndex < playbackController.clipCount - 1 ? .white : .white.opacity(0.3))
+                        .frame(width: 40, height: 32)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(8)
                 }
                 .disabled(playbackController.currentClipIndex >= playbackController.clipCount - 1)
 
                 Button {
                     playbackController.skipClips(5)
                 } label: {
-                    Image(systemName: "forward.end.fill")
-                        .font(.body)
+                    Text("+5")
+                        .font(.subheadline.bold())
                         .foregroundColor(playbackController.currentClipIndex < playbackController.clipCount - 5 ? .white : .white.opacity(0.3))
+                        .frame(width: 40, height: 32)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(8)
                 }
                 .disabled(playbackController.currentClipIndex >= playbackController.clipCount - 5)
             }
