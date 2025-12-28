@@ -18,6 +18,8 @@ struct VideoTrimmerView: View {
     @State private var isDraggingMiddle = false
     @State private var dragStartTrimStart: TimeInterval = 0
     @State private var dragStartTrimEnd: TimeInterval = 0
+    @State private var originalTrimStart: TimeInterval = 0
+    @State private var originalTrimEnd: TimeInterval = 0
 
     private let thumbnailCount = 10
 
@@ -66,6 +68,9 @@ struct VideoTrimmerView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
+                        // Restore original values
+                        trimStart = originalTrimStart
+                        trimEnd = originalTrimEnd
                         dismiss()
                     }
                 }
@@ -78,6 +83,8 @@ struct VideoTrimmerView: View {
             }
         }
         .onAppear {
+            originalTrimStart = trimStart
+            originalTrimEnd = trimEnd
             setupPlayer()
             generateThumbnails()
         }
