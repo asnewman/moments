@@ -10,10 +10,14 @@ enum VideoSortOption {
     case lengthLongest
 }
 
+struct PreviewClips: Identifiable {
+    let id = UUID()
+    let clips: [VideoClip]
+}
+
 struct ProjectEditorView: View {
     @Bindable var project: Project
     @Environment(\.modelContext) private var modelContext
-    @StateObject private var videoCombiner = VideoCombiner()
 
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var videoItems: [VideoItem] = []
@@ -21,8 +25,7 @@ struct ProjectEditorView: View {
     @State private var showingAlert = false
     @State private var alertMessage = ""
     @State private var editingVideoIndex: Int?
-    @State private var previewURL: URL?
-    @State private var showingPreview = false
+    @State private var clipsToPreview: PreviewClips?
     @State private var showingRenameAlert = false
     @State private var newProjectName = ""
     @State private var showingPhotoPicker = false
@@ -136,7 +139,7 @@ struct ProjectEditorView: View {
             }
         }
         .overlay {
-            if isLoading || videoCombiner.isProcessing {
+            if isLoading {
                 loadingOverlay
             }
         }
@@ -162,14 +165,18 @@ struct ProjectEditorView: View {
                 )
             }
         }
-        .fullScreenCover(isPresented: $showingPreview) {
-            if let url = previewURL {
-                VideoPreviewView(
-                    videoURL: url,
-                    onSave: savePreviewedVideo,
-                    onDiscard: discardPreview
-                )
-            }
+        .fullScreenCover(item: $clipsToPreview) { previewData in
+            VideoPreviewView(
+                clips: previewData.clips,
+                onSave: {
+                    clipsToPreview = nil
+                    alertMessage = "Video saved to your photo library!"
+                    showingAlert = true
+                },
+                onDiscard: {
+                    clipsToPreview = nil
+                }
+            )
         }
         .task {
             await loadProjectClips()
@@ -300,7 +307,7 @@ struct ProjectEditorView: View {
                         .foregroundColor(.white)
                         .cornerRadius(12)
                 }
-                .disabled(videoItems.count < 2 || videoCombiner.isProcessing)
+                .disabled(videoItems.count < 2)
             }
         }
     }
@@ -314,23 +321,9 @@ struct ProjectEditorView: View {
                 ProgressView()
                     .scaleEffect(1.5)
 
-                if videoCombiner.isProcessing {
-                    Text("Processing...")
-                        .font(.headline)
-                        .foregroundColor(.white)
-
-                    ProgressView(value: videoCombiner.progress)
-                        .progressViewStyle(.linear)
-                        .frame(width: 200)
-
-                    Text("\(Int(videoCombiner.progress * 100))%")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-                } else {
-                    Text("Loading videos...")
-                        .font(.headline)
-                        .foregroundColor(.white)
-                }
+                Text("Loading videos...")
+                    .font(.headline)
+                    .foregroundColor(.white)
             }
             .padding(30)
             .background(.ultraThinMaterial)
@@ -559,49 +552,14 @@ struct ProjectEditorView: View {
             return
         }
 
-        Task {
-            do {
-                let clips = videoItems.map { item in
-                    VideoClip(
-                        url: item.url,
-                        trimStart: item.trimStart,
-                        trimEnd: item.trimEnd
-                    )
-                }
-                let url = try await videoCombiner.createCombinedVideo(clips: clips)
-                previewURL = url
-                showingPreview = true
-            } catch {
-                alertMessage = error.localizedDescription
-                showingAlert = true
-            }
+        let clips = videoItems.map { item in
+            VideoClip(
+                url: item.url,
+                trimStart: item.trimStart,
+                trimEnd: item.trimEnd
+            )
         }
-    }
-
-    private func savePreviewedVideo() {
-        guard let url = previewURL else { return }
-
-        Task {
-            do {
-                try await videoCombiner.saveToPhotoLibrary(url: url)
-                try? FileManager.default.removeItem(at: url)
-                previewURL = nil
-                showingPreview = false
-                alertMessage = "Video saved to your photo library!"
-                showingAlert = true
-            } catch {
-                alertMessage = error.localizedDescription
-                showingAlert = true
-            }
-        }
-    }
-
-    private func discardPreview() {
-        if let url = previewURL {
-            try? FileManager.default.removeItem(at: url)
-        }
-        previewURL = nil
-        showingPreview = false
+        clipsToPreview = PreviewClips(clips: clips)
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {
