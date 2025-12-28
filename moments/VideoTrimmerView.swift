@@ -15,6 +15,9 @@ struct VideoTrimmerView: View {
     @State private var thumbnails: [UIImage] = []
     @State private var isDraggingStart = false
     @State private var isDraggingEnd = false
+    @State private var isDraggingMiddle = false
+    @State private var dragStartTrimStart: TimeInterval = 0
+    @State private var dragStartTrimEnd: TimeInterval = 0
 
     private let thumbnailCount = 10
 
@@ -135,6 +138,48 @@ struct VideoTrimmerView: View {
                     .frame(width: endPosition - startPosition, height: 50)
                     .offset(x: startPosition)
 
+                // Draggable middle section (between handles)
+                Rectangle()
+                    .fill(Color.clear)
+                    .frame(width: max(0, endPosition - startPosition - 40), height: 50)
+                    .offset(x: startPosition + 20)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                if !isDraggingMiddle {
+                                    // Store initial positions when drag starts
+                                    isDraggingMiddle = true
+                                    dragStartTrimStart = trimStart
+                                    dragStartTrimEnd = trimEnd
+                                }
+
+                                let trimDuration = dragStartTrimEnd - dragStartTrimStart
+                                let deltaX = value.translation.width
+                                let deltaTime = (deltaX / width) * originalDuration
+
+                                var newStart = dragStartTrimStart + deltaTime
+                                var newEnd = dragStartTrimEnd + deltaTime
+
+                                // Clamp to bounds while maintaining duration
+                                if newStart < 0 {
+                                    newStart = 0
+                                    newEnd = trimDuration
+                                }
+                                if newEnd > originalDuration {
+                                    newEnd = originalDuration
+                                    newStart = originalDuration - trimDuration
+                                }
+
+                                trimStart = newStart
+                                trimEnd = newEnd
+                                seekToTime(trimStart)
+                            }
+                            .onEnded { _ in
+                                isDraggingMiddle = false
+                            }
+                    )
+
                 // Start handle
                 trimHandle(isStart: true)
                     .offset(x: startPosition - 10)
@@ -168,7 +213,7 @@ struct VideoTrimmerView: View {
                     )
 
                 // Playhead
-                if !isDraggingStart && !isDraggingEnd {
+                if !isDraggingStart && !isDraggingEnd && !isDraggingMiddle {
                     let playheadPosition = (currentTime / originalDuration) * width
                     Rectangle()
                         .fill(Color.white)
