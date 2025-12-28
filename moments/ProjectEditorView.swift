@@ -33,7 +33,7 @@ struct ProjectEditorView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            if videoItems.isEmpty && !isLoading {
+            if videoItems.isEmpty && !isLoading && project.clips.isEmpty {
                 emptyStateView
             } else {
                 videoListView
@@ -374,11 +374,27 @@ struct ProjectEditorView: View {
 
         let sortedClips = project.clips.sorted { $0.orderIndex < $1.orderIndex }
 
-        for clipData in sortedClips {
-            if let videoItem = await loadVideoFromAsset(identifier: clipData.assetIdentifier, clipData: clipData) {
-                videoItems.append(videoItem)
+        // Load all videos in parallel
+        let loadedItems = await withTaskGroup(of: (Int, VideoItem?).self) { group in
+            for (index, clipData) in sortedClips.enumerated() {
+                group.addTask {
+                    let item = await self.loadVideoFromAsset(identifier: clipData.assetIdentifier, clipData: clipData)
+                    return (index, item)
+                }
             }
+
+            // Collect results
+            var results: [(Int, VideoItem?)] = []
+            for await result in group {
+                results.append(result)
+            }
+            return results
         }
+
+        // Sort back into original order and filter out nils
+        videoItems = loadedItems
+            .sorted { $0.0 < $1.0 }
+            .compactMap { $0.1 }
 
         isLoading = false
     }
