@@ -106,6 +106,24 @@ struct ProjectEditorView: View {
                         Label("Trim All to Middle", systemImage: "scissors")
                     }
                     .disabled(videoItems.count < 2)
+
+                    Menu {
+                        ForEach(ExportQuality.allCases, id: \.self) { quality in
+                            Button {
+                                project.exportQuality = quality
+                                project.modifiedAt = Date()
+                            } label: {
+                                HStack {
+                                    Text(quality.displayName)
+                                    if project.exportQuality == quality {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Label("Export Quality: \(project.exportQuality.displayName)", systemImage: "dial.medium")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -168,6 +186,7 @@ struct ProjectEditorView: View {
         .fullScreenCover(item: $clipsToPreview) { previewData in
             VideoPreviewView(
                 clips: previewData.clips,
+                exportQuality: project.exportQuality,
                 onSave: {
                     clipsToPreview = nil
                     alertMessage = "Video saved to your photo library!"

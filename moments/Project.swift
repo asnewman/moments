@@ -6,12 +6,19 @@ final class Project {
     var name: String
     var createdAt: Date
     var modifiedAt: Date
+    var exportQualityRaw: String = "highest"
     @Relationship(deleteRule: .cascade) var clips: [VideoClipData]
+
+    var exportQuality: ExportQuality {
+        get { ExportQuality(rawValue: exportQualityRaw) ?? .highest }
+        set { exportQualityRaw = newValue.rawValue }
+    }
 
     init(name: String = "Untitled Project") {
         self.name = name
         self.createdAt = Date()
         self.modifiedAt = Date()
+        self.exportQualityRaw = ExportQuality.highest.rawValue
         self.clips = []
     }
 }

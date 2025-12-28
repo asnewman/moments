@@ -141,6 +141,7 @@ class SequentialPlaybackController: ObservableObject {
 
 struct VideoPreviewView: View {
     let clips: [VideoClip]
+    let exportQuality: ExportQuality
     let onSave: () -> Void
     let onDiscard: () -> Void
 
@@ -152,8 +153,9 @@ struct VideoPreviewView: View {
     @State private var isExporting = false
 
     // New initializer for sequential playback (no pre-processing)
-    init(clips: [VideoClip], onSave: @escaping () -> Void, onDiscard: @escaping () -> Void) {
+    init(clips: [VideoClip], exportQuality: ExportQuality = .highest, onSave: @escaping () -> Void, onDiscard: @escaping () -> Void) {
         self.clips = clips
+        self.exportQuality = exportQuality
         self.onSave = onSave
         self.onDiscard = onDiscard
         self.preExportedURL = nil
@@ -162,6 +164,7 @@ struct VideoPreviewView: View {
     // Legacy initializer for pre-combined video (ContentView compatibility)
     init(videoURL: URL, onSave: @escaping () -> Void, onDiscard: @escaping () -> Void) {
         self.clips = []
+        self.exportQuality = .highest
         self.onSave = onSave
         self.onDiscard = onDiscard
         self.preExportedURL = videoURL
@@ -328,7 +331,7 @@ struct VideoPreviewView: View {
         Task {
             do {
                 // Now do the actual video combining
-                let outputURL = try await videoCombiner.createCombinedVideo(clips: clips)
+                let outputURL = try await videoCombiner.createCombinedVideo(clips: clips, quality: exportQuality)
 
                 // Save to photo library
                 try await videoCombiner.saveToPhotoLibrary(url: outputURL)

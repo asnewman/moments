@@ -1,6 +1,39 @@
 import AVFoundation
 import Photos
 
+enum ExportQuality: String, CaseIterable {
+    case low = "low"
+    case medium = "medium"
+    case high = "high"
+    case highest = "highest"
+
+    var presetName: String {
+        switch self {
+        case .low:
+            return AVAssetExportPresetLowQuality
+        case .medium:
+            return AVAssetExportPresetMediumQuality
+        case .high:
+            return AVAssetExportPreset1920x1080
+        case .highest:
+            return AVAssetExportPresetHighestQuality
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .low:
+            return "Low"
+        case .medium:
+            return "Medium"
+        case .high:
+            return "High (1080p)"
+        case .highest:
+            return "Highest"
+        }
+    }
+}
+
 enum VideoCombinerError: LocalizedError {
     case noVideosProvided
     case failedToLoadAsset(URL)
@@ -51,7 +84,7 @@ class VideoCombiner: ObservableObject {
     @Published var errorMessage: String?
     @Published var isComplete = false
 
-    func createCombinedVideo(clips: [VideoClip]) async throws -> URL {
+    func createCombinedVideo(clips: [VideoClip], quality: ExportQuality = .highest) async throws -> URL {
         guard !clips.isEmpty else {
             throw VideoCombinerError.noVideosProvided
         }
@@ -180,7 +213,7 @@ class VideoCombiner: ObservableObject {
 
         guard let exportSession = AVAssetExportSession(
             asset: composition,
-            presetName: AVAssetExportPresetHighestQuality
+            presetName: quality.presetName
         ) else {
             throw VideoCombinerError.failedToCreateExportSession
         }
