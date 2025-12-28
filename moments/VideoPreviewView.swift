@@ -138,52 +138,33 @@ class SequentialPlaybackController: ObservableObject {
         currentPlayer = nil
     }
 
-    func skip(seconds: Double) {
-        let totalDuration = clips.reduce(0) { $0 + $1.duration }
-        guard totalDuration > 0 else { return }
+    func skipClips(_ count: Int) {
+        let newIndex = max(0, min(currentClipIndex + count, clips.count - 1))
+        guard newIndex != currentClipIndex else { return }
 
-        // Calculate current absolute position
-        let completedDuration = clips.prefix(currentClipIndex).reduce(0) { $0 + $1.duration }
-        let currentClip = clips[currentClipIndex]
-        let currentTimeInClip = currentPlayer?.currentTime().seconds ?? currentClip.trimStart
-        let currentClipProgress = max(0, currentTimeInClip - currentClip.trimStart)
-        let currentAbsolutePosition = completedDuration + currentClipProgress
+        // Stop current playback
+        let wasPlaying = isPlaying
+        currentPlayer?.pause()
 
-        // Calculate new absolute position
-        var newAbsolutePosition = currentAbsolutePosition + seconds
-        newAbsolutePosition = max(0, min(newAbsolutePosition, totalDuration - 0.1))
-
-        // Find which clip this position falls into
-        var accumulatedDuration: Double = 0
-        for (index, clip) in clips.enumerated() {
-            if newAbsolutePosition < accumulatedDuration + clip.duration {
-                // Found the target clip
-                let positionInClip = newAbsolutePosition - accumulatedDuration
-                let seekTime = clip.trimStart + positionInClip
-
-                if index != currentClipIndex {
-                    // Need to switch clips
-                    currentClipIndex = index
-                    loadClip(at: index)
-
-                    // Seek after a brief delay to allow player to load
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-                        let time = CMTime(seconds: seekTime, preferredTimescale: 600)
-                        self?.currentPlayer?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-                    }
-                } else {
-                    // Same clip, just seek
-                    let time = CMTime(seconds: seekTime, preferredTimescale: 600)
-                    currentPlayer?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
-                }
-
-                // Update progress
-                totalProgress = newAbsolutePosition / totalDuration
-                isFinished = false
-                return
-            }
-            accumulatedDuration += clip.duration
+        // Remove existing observer
+        if let observer = timeObserver, let player = currentPlayer {
+            player.removeTimeObserver(observer)
+            timeObserver = nil
         }
+
+        currentClipIndex = newIndex
+        isFinished = false
+        loadClip(at: newIndex)
+
+        // Resume if was playing
+        if wasPlaying {
+            currentPlayer?.play()
+        }
+
+        // Update progress
+        let totalDuration = clips.reduce(0) { $0 + $1.duration }
+        let completedDuration = clips.prefix(currentClipIndex).reduce(0) { $0 + $1.duration }
+        totalProgress = completedDuration / totalDuration
     }
 }
 
@@ -321,28 +302,24 @@ struct VideoPreviewView: View {
                 .progressViewStyle(.linear)
                 .tint(.white)
 
-            HStack(spacing: 20) {
+            HStack(spacing: 24) {
                 Button {
-                    playbackController.skip(seconds: -5)
+                    playbackController.skipClips(-5)
                 } label: {
-                    Text("-5s")
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 32)
-                        .background(Color.white.opacity(0.2))
-                        .cornerRadius(8)
+                    Image(systemName: "backward.end.fill")
+                        .font(.body)
+                        .foregroundColor(playbackController.currentClipIndex >= 5 ? .white : .white.opacity(0.3))
                 }
+                .disabled(playbackController.currentClipIndex < 5)
 
                 Button {
-                    playbackController.skip(seconds: -1)
+                    playbackController.skipClips(-1)
                 } label: {
-                    Text("-1s")
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 32)
-                        .background(Color.white.opacity(0.2))
-                        .cornerRadius(8)
+                    Image(systemName: "backward.fill")
+                        .font(.body)
+                        .foregroundColor(playbackController.currentClipIndex > 0 ? .white : .white.opacity(0.3))
                 }
+                .disabled(playbackController.currentClipIndex == 0)
 
                 Button {
                     if playbackController.isPlaying {
@@ -358,26 +335,22 @@ struct VideoPreviewView: View {
                 }
 
                 Button {
-                    playbackController.skip(seconds: 1)
+                    playbackController.skipClips(1)
                 } label: {
-                    Text("+1s")
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 32)
-                        .background(Color.white.opacity(0.2))
-                        .cornerRadius(8)
+                    Image(systemName: "forward.fill")
+                        .font(.body)
+                        .foregroundColor(playbackController.currentClipIndex < playbackController.clipCount - 1 ? .white : .white.opacity(0.3))
                 }
+                .disabled(playbackController.currentClipIndex >= playbackController.clipCount - 1)
 
                 Button {
-                    playbackController.skip(seconds: 5)
+                    playbackController.skipClips(5)
                 } label: {
-                    Text("+5s")
-                        .font(.caption.bold())
-                        .foregroundColor(.white)
-                        .frame(width: 44, height: 32)
-                        .background(Color.white.opacity(0.2))
-                        .cornerRadius(8)
+                    Image(systemName: "forward.end.fill")
+                        .font(.body)
+                        .foregroundColor(playbackController.currentClipIndex < playbackController.clipCount - 5 ? .white : .white.opacity(0.3))
                 }
+                .disabled(playbackController.currentClipIndex >= playbackController.clipCount - 5)
             }
 
             Text("Clip \(playbackController.currentClipIndex + 1) of \(playbackController.clipCount)")
