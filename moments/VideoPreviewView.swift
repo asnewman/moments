@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import AVFoundation
 
 @MainActor
 class SequentialPlaybackController: ObservableObject {
@@ -20,6 +21,15 @@ class SequentialPlaybackController: ObservableObject {
         self.clips = clips
         currentClipIndex = 0
         isFinished = false
+
+        // Configure audio session for playback
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Failed to configure audio session: \(error)")
+        }
+
         loadClip(at: 0)
     }
 
