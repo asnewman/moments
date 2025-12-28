@@ -30,6 +30,7 @@ struct ProjectEditorView: View {
     @State private var newProjectName = ""
     @State private var showingPhotoPicker = false
     @State private var showingAlbumPicker = false
+    @State private var useLargeThumbnails = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -66,6 +67,13 @@ struct ProjectEditorView: View {
                         showingAlbumPicker = true
                     } label: {
                         Label("Import from Album", systemImage: "rectangle.stack")
+                    }
+
+                    Button {
+                        useLargeThumbnails.toggle()
+                    } label: {
+                        Label(useLargeThumbnails ? "Compact View" : "Large Thumbnails",
+                              systemImage: useLargeThumbnails ? "list.bullet" : "photo")
                     }
 
                     Menu {
@@ -263,59 +271,11 @@ struct ProjectEditorView: View {
                     Button {
                         editingVideoIndex = index
                     } label: {
-                        HStack(spacing: 12) {
-                            Text("\(index + 1)")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .frame(width: 24, height: 24)
-                                .background(Color.accentColor)
-                                .foregroundColor(.white)
-                                .clipShape(Circle())
-
-                            if let thumbnail = item.thumbnail {
-                                Image(uiImage: thumbnail)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 60, height: 40)
-                                    .clipped()
-                                    .cornerRadius(6)
-                            } else {
-                                Rectangle()
-                                    .fill(Color.secondary.opacity(0.2))
-                                    .frame(width: 60, height: 40)
-                                    .cornerRadius(6)
-                            }
-
-                            VStack(alignment: .leading) {
-                                if let date = item.creationDate {
-                                    Text(date, format: .dateTime.month().day().year())
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                } else {
-                                    Text("Clip \(index + 1)")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                }
-                                HStack(spacing: 4) {
-                                    Text(formatDuration(item.trimmedDuration))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    if item.trimStart > 0 || item.trimEnd < item.originalDuration {
-                                        Image(systemName: "scissors")
-                                            .font(.caption2)
-                                            .foregroundStyle(.orange)
-                                    }
-                                }
-                            }
-
-                            Spacer()
-
-                            Image(systemName: "chevron.right")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
+                        if useLargeThumbnails {
+                            largeClipRow(index: index, item: item)
+                        } else {
+                            compactClipRow(index: index, item: item)
                         }
-                        .padding(.vertical, 4)
-                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -334,6 +294,123 @@ struct ProjectEditorView: View {
             }
             .padding(.horizontal, 4)
         }
+    }
+
+    private func compactClipRow(index: Int, item: VideoItem) -> some View {
+        HStack(spacing: 12) {
+            Text("\(index + 1)")
+                .font(.caption)
+                .fontWeight(.bold)
+                .frame(width: 24, height: 24)
+                .background(Color.accentColor)
+                .foregroundColor(.white)
+                .clipShape(Circle())
+
+            if let thumbnail = item.thumbnail {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 60, height: 40)
+                    .clipped()
+                    .cornerRadius(6)
+            } else {
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.2))
+                    .frame(width: 60, height: 40)
+                    .cornerRadius(6)
+            }
+
+            VStack(alignment: .leading) {
+                if let date = item.creationDate {
+                    Text(date, format: .dateTime.month().day().year())
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                } else {
+                    Text("Clip \(index + 1)")
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                }
+                HStack(spacing: 4) {
+                    Text(formatDuration(item.trimmedDuration))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if item.trimStart > 0 || item.trimEnd < item.originalDuration {
+                        Image(systemName: "scissors")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                }
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+    }
+
+    private func largeClipRow(index: Int, item: VideoItem) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .topLeading) {
+                if let thumbnail = item.thumbnail {
+                    Image(uiImage: thumbnail)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 180)
+                        .clipped()
+                        .cornerRadius(10)
+                } else {
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.2))
+                        .frame(height: 180)
+                        .cornerRadius(10)
+                }
+
+                Text("\(index + 1)")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .frame(width: 24, height: 24)
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .clipShape(Circle())
+                    .padding(8)
+            }
+
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    if let date = item.creationDate {
+                        Text(date, format: .dateTime.month().day().year())
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    } else {
+                        Text("Clip \(index + 1)")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                    }
+                    HStack(spacing: 4) {
+                        Text(formatDuration(item.trimmedDuration))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        if item.trimStart > 0 || item.trimEnd < item.originalDuration {
+                            Image(systemName: "scissors")
+                                .font(.caption2)
+                                .foregroundStyle(.orange)
+                        }
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 
     private var actionButtons: some View {
