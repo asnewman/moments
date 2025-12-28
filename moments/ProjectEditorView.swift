@@ -287,9 +287,15 @@ struct ProjectEditorView: View {
                             }
 
                             VStack(alignment: .leading) {
-                                Text("Clip \(index + 1)")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
+                                if let date = item.creationDate {
+                                    Text(date, format: .dateTime.month().day().year())
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                } else {
+                                    Text("Clip \(index + 1)")
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                }
                                 HStack(spacing: 4) {
                                     Text(formatDuration(item.trimmedDuration))
                                         .font(.caption)
@@ -309,6 +315,7 @@ struct ProjectEditorView: View {
                                 .foregroundStyle(.tertiary)
                         }
                         .padding(.vertical, 4)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
