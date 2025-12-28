@@ -70,7 +70,7 @@ struct ContentView: View {
                     loadingOverlay
                 }
             }
-            .sheet(item: $editingVideoIndex) { index in
+            .fullScreenCover(item: $editingVideoIndex) { index in
                 if index < videoItems.count {
                     VideoTrimmerView(
                         videoURL: videoItems[index].url,
