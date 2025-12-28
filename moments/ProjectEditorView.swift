@@ -29,6 +29,7 @@ struct ProjectEditorView: View {
     @State private var showingRenameAlert = false
     @State private var newProjectName = ""
     @State private var showingPhotoPicker = false
+    @State private var showingAlbumPicker = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -59,6 +60,12 @@ struct ProjectEditorView: View {
                         showingPhotoPicker = true
                     } label: {
                         Label("Add Videos", systemImage: "plus")
+                    }
+
+                    Button {
+                        showingAlbumPicker = true
+                    } label: {
+                        Label("Import from Album", systemImage: "rectangle.stack")
                     }
 
                     Menu {
@@ -196,6 +203,13 @@ struct ProjectEditorView: View {
                     clipsToPreview = nil
                 }
             )
+        }
+        .sheet(isPresented: $showingAlbumPicker) {
+            AlbumPickerView { album in
+                Task {
+                    await importVideosFromAlbum(album)
+                }
+            }
         }
         .task {
             await loadProjectClips()
@@ -431,6 +445,81 @@ struct ProjectEditorView: View {
         project.modifiedAt = Date()
         selectedItems = []
         isLoading = false
+    }
+
+    private func importVideosFromAlbum(_ album: PHAssetCollection) async {
+        isLoading = true
+
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.video.rawValue)
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
+        let fetchResult = PHAsset.fetchAssets(in: album, options: options)
+
+        // Collect assets into an array first
+        var assetsToImport: [PHAsset] = []
+        fetchResult.enumerateObjects { asset, _, _ in
+            let identifier = asset.localIdentifier
+            if !self.project.clips.contains(where: { $0.assetIdentifier == identifier }) {
+                assetsToImport.append(asset)
+            }
+        }
+
+        var addedCount = 0
+        for asset in assetsToImport {
+            if let videoItem = await loadVideoFromPHAsset(asset) {
+                videoItems.append(videoItem)
+
+                let clipData = VideoClipData(
+                    assetIdentifier: asset.localIdentifier,
+                    trimStart: 0,
+                    trimEnd: videoItem.originalDuration,
+                    originalDuration: videoItem.originalDuration,
+                    orderIndex: project.clips.count
+                )
+                project.clips.append(clipData)
+                addedCount += 1
+            }
+        }
+
+        project.modifiedAt = Date()
+        isLoading = false
+
+        if addedCount > 0 {
+            alertMessage = "Added \(addedCount) video\(addedCount == 1 ? "" : "s") from album"
+            showingAlert = true
+        }
+    }
+
+    private func loadVideoFromPHAsset(_ asset: PHAsset) async -> VideoItem? {
+        let creationDate = asset.creationDate
+
+        return await withCheckedContinuation { continuation in
+            let options = PHVideoRequestOptions()
+            options.version = .current
+            options.deliveryMode = .highQualityFormat
+            options.isNetworkAccessAllowed = true
+
+            PHImageManager.default().requestAVAsset(forVideo: asset, options: options) { avAsset, _, _ in
+                guard let urlAsset = avAsset as? AVURLAsset else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                Task {
+                    let duration = try? await urlAsset.load(.duration)
+                    let thumbnail = await self.generateThumbnail(for: urlAsset)
+
+                    var videoItem = VideoItem(
+                        url: urlAsset.url,
+                        thumbnail: thumbnail,
+                        duration: duration?.seconds ?? 0,
+                        creationDate: creationDate
+                    )
+                    videoItem.assetIdentifier = asset.localIdentifier
+                    continuation.resume(returning: videoItem)
+                }
+            }
+        }
     }
 
     private func loadVideoFromPickerItem(_ item: PhotosPickerItem, assetIdentifier: String) async -> VideoItem? {
