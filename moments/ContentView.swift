@@ -303,7 +303,7 @@ struct ContentView: View {
     private func generateThumbnail(for asset: AVURLAsset) async -> UIImage? {
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
-        imageGenerator.maximumSize = CGSize(width: 120, height: 80)
+        imageGenerator.maximumSize = CGSize(width: 400, height: 300)
 
         do {
             let cgImage = try imageGenerator.copyCGImage(at: .zero, actualTime: nil)
