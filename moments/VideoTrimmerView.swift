@@ -45,6 +45,10 @@ struct VideoTrimmerView: View {
                     }
                     .padding(.horizontal)
 
+                    // Position slider for moving the selection
+                    positionSlider
+                        .padding(.horizontal)
+
                     // Thumbnail timeline with trim handles
                     trimmerTimeline
                         .padding(.horizontal)
@@ -138,48 +142,6 @@ struct VideoTrimmerView: View {
                     .frame(width: endPosition - startPosition, height: 50)
                     .offset(x: startPosition)
 
-                // Draggable middle section (between handles)
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(width: max(0, endPosition - startPosition - 40), height: 50)
-                    .offset(x: startPosition + 20)
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture()
-                            .onChanged { value in
-                                if !isDraggingMiddle {
-                                    // Store initial positions when drag starts
-                                    isDraggingMiddle = true
-                                    dragStartTrimStart = trimStart
-                                    dragStartTrimEnd = trimEnd
-                                }
-
-                                let trimDuration = dragStartTrimEnd - dragStartTrimStart
-                                let deltaX = value.translation.width
-                                let deltaTime = (deltaX / width) * originalDuration
-
-                                var newStart = dragStartTrimStart + deltaTime
-                                var newEnd = dragStartTrimEnd + deltaTime
-
-                                // Clamp to bounds while maintaining duration
-                                if newStart < 0 {
-                                    newStart = 0
-                                    newEnd = trimDuration
-                                }
-                                if newEnd > originalDuration {
-                                    newEnd = originalDuration
-                                    newStart = originalDuration - trimDuration
-                                }
-
-                                trimStart = newStart
-                                trimEnd = newEnd
-                                seekToTime(trimStart)
-                            }
-                            .onEnded { _ in
-                                isDraggingMiddle = false
-                            }
-                    )
-
                 // Start handle
                 trimHandle(isStart: true)
                     .offset(x: startPosition - 10)
@@ -223,6 +185,74 @@ struct VideoTrimmerView: View {
             }
         }
         .frame(height: 50)
+    }
+
+    private var positionSlider: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let trimDuration = trimEnd - trimStart
+            let sliderWidth = max(44, (trimDuration / originalDuration) * width)
+            let maxOffset = width - sliderWidth
+            let sliderOffset = (trimStart / (originalDuration - trimDuration)) * maxOffset
+
+            ZStack(alignment: .leading) {
+                // Track background
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color(.systemGray5))
+                    .frame(height: 32)
+
+                // Draggable slider thumb
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.yellow)
+                    .frame(width: sliderWidth, height: 32)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.yellow.opacity(0.8), lineWidth: 1)
+                    }
+                    .overlay {
+                        Image(systemName: "arrow.left.and.right")
+                            .font(.caption.bold())
+                            .foregroundColor(.black)
+                    }
+                    .offset(x: trimDuration >= originalDuration ? 0 : sliderOffset)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                if !isDraggingMiddle {
+                                    isDraggingMiddle = true
+                                    dragStartTrimStart = trimStart
+                                    dragStartTrimEnd = trimEnd
+                                }
+
+                                let dragMaxOffset = width - sliderWidth
+                                let deltaX = value.translation.width
+                                let deltaRatio = dragMaxOffset > 0 ? deltaX / dragMaxOffset : 0
+                                let deltaTime = deltaRatio * (originalDuration - trimDuration)
+
+                                var newStart = dragStartTrimStart + deltaTime
+                                var newEnd = dragStartTrimEnd + deltaTime
+
+                                // Clamp to bounds
+                                if newStart < 0 {
+                                    newStart = 0
+                                    newEnd = trimDuration
+                                }
+                                if newEnd > originalDuration {
+                                    newEnd = originalDuration
+                                    newStart = originalDuration - trimDuration
+                                }
+
+                                trimStart = newStart
+                                trimEnd = newEnd
+                                seekToTime(trimStart)
+                            }
+                            .onEnded { _ in
+                                isDraggingMiddle = false
+                            }
+                    )
+            }
+        }
+        .frame(height: 32)
     }
 
     private func trimHandle(isStart: Bool) -> some View {
