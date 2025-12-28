@@ -86,6 +86,23 @@ struct ProjectEditorView: View {
                         Label("Sort", systemImage: "arrow.up.arrow.down")
                     }
                     .disabled(videoItems.count < 2)
+
+                    Menu {
+                        Button {
+                            trimAllToMiddle(seconds: 1.0)
+                        } label: {
+                            Label("1 Second", systemImage: "1.circle")
+                        }
+
+                        Button {
+                            trimAllToMiddle(seconds: 2.0)
+                        } label: {
+                            Label("2 Seconds", systemImage: "2.circle")
+                        }
+                    } label: {
+                        Label("Trim All to Middle", systemImage: "scissors")
+                    }
+                    .disabled(videoItems.count < 2)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -490,6 +507,28 @@ struct ProjectEditorView: View {
         for (index, item) in videoItems.enumerated() {
             if let clipIndex = project.clips.firstIndex(where: { $0.assetIdentifier == item.assetIdentifier }) {
                 project.clips[clipIndex].orderIndex = index
+            }
+        }
+        project.modifiedAt = Date()
+    }
+
+    private func trimAllToMiddle(seconds: Double) {
+        for index in videoItems.indices {
+            let video = videoItems[index]
+            guard video.originalDuration > seconds else { continue }
+
+            let midpoint = video.originalDuration / 2
+            let newTrimStart = midpoint - (seconds / 2)
+            let newTrimEnd = midpoint + (seconds / 2)
+
+            videoItems[index].trimStart = newTrimStart
+            videoItems[index].trimEnd = newTrimEnd
+
+            // Update persisted clip data
+            if let assetId = video.assetIdentifier,
+               let clipData = project.clips.first(where: { $0.assetIdentifier == assetId }) {
+                clipData.trimStart = newTrimStart
+                clipData.trimEnd = newTrimEnd
             }
         }
         project.modifiedAt = Date()
