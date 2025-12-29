@@ -20,6 +20,13 @@ struct ProjectListView: View {
             }
             .navigationTitle("Moments")
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        openFeedbackEmail()
+                    } label: {
+                        Image(systemName: "envelope")
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         newProjectName = ""

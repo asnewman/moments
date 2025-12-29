@@ -1,4 +1,14 @@
 import SwiftUI
+import UIKit
+
+func openFeedbackEmail() {
+    let email = "ashznewman@gmail.com"
+    let subject = "Moments App Feedback"
+    let urlString = "mailto:\(email)?subject=\(subject.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+    if let url = URL(string: urlString) {
+        UIApplication.shared.open(url)
+    }
+}
 
 extension Color {
     static let themePrimary = Color(hex: "778F82")

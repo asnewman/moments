@@ -139,6 +139,14 @@ struct ProjectEditorView: View {
                     } label: {
                         Label("Export Quality: \(project.exportQuality.displayName)", systemImage: "dial.medium")
                     }
+
+                    Divider()
+
+                    Button {
+                        openFeedbackEmail()
+                    } label: {
+                        Label("Send Feedback", systemImage: "envelope")
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
