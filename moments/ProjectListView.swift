@@ -8,6 +8,8 @@ struct ProjectListView: View {
     @State private var newProjectName = ""
     @State private var projectToDelete: Project?
     @State private var showingDeleteConfirmation = false
+    @State private var showingWelcome = false
+    @AppStorage("hasSeenWelcome") private var hasSeenWelcome = false
 
     var body: some View {
         NavigationStack {
@@ -58,6 +60,18 @@ struct ProjectListView: View {
             } message: {
                 if let project = projectToDelete {
                     Text("Are you sure you want to delete \"\(project.name)\"? This cannot be undone.")
+                }
+            }
+            .alert("Welcome to Moments!", isPresented: $showingWelcome) {
+                Button("Got it!") {
+                    hasSeenWelcome = true
+                }
+            } message: {
+                Text("Thank you so much for downloading Moments!\n\nThis app is built by a single developer, and I truly appreciate you giving it a try.\n\nIf you run into any bugs or have feedback, please tap the 💬 icon in the top left. I read every message!\n\nEnjoy combining your moments!")
+            }
+            .onAppear {
+                if !hasSeenWelcome {
+                    showingWelcome = true
                 }
             }
         }
