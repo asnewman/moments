@@ -208,7 +208,7 @@ struct VideoPreviewView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.black.ignoresSafeArea()
+                Color.themeSurface.ignoresSafeArea()
 
                 if isLegacyMode {
                     // Legacy mode: play pre-combined video
@@ -241,7 +241,7 @@ struct VideoPreviewView: View {
             .navigationTitle("Preview")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarBackground(Color.black.opacity(0.8), for: .navigationBar)
+            .toolbarBackground(Color.themeSurface.opacity(0.8), for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -391,7 +391,7 @@ struct VideoPreviewView: View {
 
     private var exportProgressOverlay: some View {
         ZStack {
-            Color.black.opacity(0.6)
+            Color.themeSurface.opacity(0.6)
                 .ignoresSafeArea()
 
             VStack(spacing: 16) {

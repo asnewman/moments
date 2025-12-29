@@ -62,7 +62,7 @@ struct VideoTrimmerView: View {
                 .padding(.vertical)
                 .background(Color(.systemBackground))
             }
-            .background(Color.black)
+            .background(Color.themeSurface)
             .navigationTitle("Trim Video")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -100,7 +100,7 @@ struct VideoTrimmerView: View {
                     .disabled(true)
             } else {
                 Rectangle()
-                    .fill(Color.black)
+                    .fill(Color.themeSurface)
                     .overlay {
                         ProgressView()
                     }
@@ -131,13 +131,13 @@ struct VideoTrimmerView: View {
                 // Dimmed areas outside trim range
                 HStack(spacing: 0) {
                     Rectangle()
-                        .fill(Color.black.opacity(0.6))
+                        .fill(Color.themeSurface.opacity(0.6))
                         .frame(width: startPosition)
 
                     Spacer()
 
                     Rectangle()
-                        .fill(Color.black.opacity(0.6))
+                        .fill(Color.themeSurface.opacity(0.6))
                         .frame(width: width - endPosition)
                 }
                 .frame(height: 50)
@@ -145,7 +145,7 @@ struct VideoTrimmerView: View {
 
                 // Selected range border
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.yellow, lineWidth: 3)
+                    .stroke(Color.themeSecondary, lineWidth: 3)
                     .frame(width: endPosition - startPosition, height: 50)
                     .offset(x: startPosition)
 
@@ -210,11 +210,11 @@ struct VideoTrimmerView: View {
 
                 // Draggable slider thumb
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(Color.yellow)
+                    .fill(Color.themeSecondary)
                     .frame(width: sliderWidth, height: 32)
                     .overlay {
                         RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.yellow.opacity(0.8), lineWidth: 1)
+                            .stroke(Color.themeSecondary.opacity(0.8), lineWidth: 1)
                     }
                     .overlay {
                         Image(systemName: "arrow.left.and.right")
@@ -264,7 +264,7 @@ struct VideoTrimmerView: View {
 
     private func trimHandle(isStart: Bool) -> some View {
         RoundedRectangle(cornerRadius: 4)
-            .fill(Color.yellow)
+            .fill(Color.themeSecondary)
             .frame(width: 20, height: 50)
             .overlay {
                 RoundedRectangle(cornerRadius: 4)

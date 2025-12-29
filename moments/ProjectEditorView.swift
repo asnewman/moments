@@ -247,7 +247,7 @@ struct ProjectEditorView: View {
             ) {
                 Label("Add Videos", systemImage: "plus")
                     .padding()
-                    .background(Color.accentColor)
+                    .background(Color.themePrimary)
                     .foregroundColor(.white)
                     .cornerRadius(12)
             }
@@ -302,7 +302,7 @@ struct ProjectEditorView: View {
                 .font(.caption)
                 .fontWeight(.bold)
                 .frame(width: 24, height: 24)
-                .background(Color.accentColor)
+                .background(Color.themePrimary)
                 .foregroundColor(.white)
                 .clipShape(Circle())
 
@@ -337,7 +337,7 @@ struct ProjectEditorView: View {
                     if item.trimStart > 0 || item.trimEnd < item.originalDuration {
                         Image(systemName: "scissors")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(Color.themeSecondary)
                     }
                 }
             }
@@ -373,7 +373,7 @@ struct ProjectEditorView: View {
                     .font(.caption)
                     .fontWeight(.bold)
                     .frame(width: 24, height: 24)
-                    .background(Color.accentColor)
+                    .background(Color.themePrimary)
                     .foregroundColor(.white)
                     .clipShape(Circle())
                     .padding(8)
@@ -397,7 +397,7 @@ struct ProjectEditorView: View {
                         if item.trimStart > 0 || item.trimEnd < item.originalDuration {
                             Image(systemName: "scissors")
                                 .font(.caption2)
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(Color.themeSecondary)
                         }
                     }
                 }
@@ -420,7 +420,7 @@ struct ProjectEditorView: View {
                     Label("Preview", systemImage: "play.circle")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor)
+                        .background(Color.themePrimary)
                         .foregroundColor(.white)
                         .cornerRadius(12)
                 }
@@ -431,7 +431,7 @@ struct ProjectEditorView: View {
 
     private var loadingOverlay: some View {
         ZStack {
-            Color.black.opacity(0.4)
+            Color.themeSurface.opacity(0.4)
                 .ignoresSafeArea()
 
             VStack(spacing: 16) {

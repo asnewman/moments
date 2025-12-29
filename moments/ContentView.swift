@@ -138,7 +138,7 @@ struct ContentView: View {
                                 .font(.caption)
                                 .fontWeight(.bold)
                                 .frame(width: 24, height: 24)
-                                .background(Color.accentColor)
+                                .background(Color.themePrimary)
                                 .foregroundColor(.white)
                                 .clipShape(Circle())
 
@@ -167,7 +167,7 @@ struct ContentView: View {
                                     if item.trimStart > 0 || item.trimEnd < item.originalDuration {
                                         Image(systemName: "scissors")
                                             .font(.caption2)
-                                            .foregroundStyle(.orange)
+                                            .foregroundStyle(Color.themeSecondary)
                                     }
                                 }
                             }
@@ -210,8 +210,8 @@ struct ContentView: View {
                     Label("Select Videos", systemImage: "photo.on.rectangle.angled")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor.opacity(0.1))
-                        .foregroundColor(.accentColor)
+                        .background(Color.themePrimary.opacity(0.1))
+                        .foregroundColor(Color.themePrimary)
                         .cornerRadius(12)
                 }
             } else {
@@ -219,7 +219,7 @@ struct ContentView: View {
                     Label("Preview", systemImage: "play.circle")
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color.accentColor)
+                        .background(Color.themePrimary)
                         .foregroundColor(.white)
                         .cornerRadius(12)
                 }
@@ -239,7 +239,7 @@ struct ContentView: View {
 
     private var loadingOverlay: some View {
         ZStack {
-            Color.black.opacity(0.4)
+            Color.themeSurface.opacity(0.4)
                 .ignoresSafeArea()
 
             VStack(spacing: 16) {

@@ -18,7 +18,7 @@ struct ProjectListView: View {
                     projectList
                 }
             }
-            .navigationTitle("Projects")
+            .navigationTitle("Moments")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -77,7 +77,7 @@ struct ProjectListView: View {
             } label: {
                 Label("New Project", systemImage: "plus")
                     .padding()
-                    .background(Color.accentColor)
+                    .background(Color.themePrimary)
                     .foregroundColor(.white)
                     .cornerRadius(12)
             }
