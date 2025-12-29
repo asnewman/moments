@@ -145,7 +145,7 @@ struct ProjectEditorView: View {
                     Button {
                         openFeedbackEmail()
                     } label: {
-                        Label("Send Feedback", systemImage: "envelope")
+                        Label("Send Feedback", systemImage: "bubble.left")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")

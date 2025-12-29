@@ -24,7 +24,7 @@ struct ProjectListView: View {
                     Button {
                         openFeedbackEmail()
                     } label: {
-                        Image(systemName: "envelope")
+                        Image(systemName: "bubble.left")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
