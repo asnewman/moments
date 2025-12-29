@@ -11,15 +11,11 @@ struct ProjectListView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                Color.themeSurface.ignoresSafeArea()
-
-                Group {
-                    if projects.isEmpty {
-                        emptyStateView
-                    } else {
-                        projectList
-                    }
+            Group {
+                if projects.isEmpty {
+                    emptyStateView
+                } else {
+                    projectList
                 }
             }
             .navigationTitle("Moments")
