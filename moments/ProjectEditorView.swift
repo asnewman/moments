@@ -33,18 +33,22 @@ struct ProjectEditorView: View {
     @State private var useLargeThumbnails = false
 
     var body: some View {
-        VStack(spacing: 20) {
-            if videoItems.isEmpty && !isLoading && project.clips.isEmpty {
-                emptyStateView
-            } else {
-                videoListView
+        ZStack {
+            Color.themeSurface.ignoresSafeArea()
+
+            VStack(spacing: 20) {
+                if videoItems.isEmpty && !isLoading && project.clips.isEmpty {
+                    emptyStateView
+                } else {
+                    videoListView
+                }
+
+                Spacer()
+
+                actionButtons
             }
-
-            Spacer()
-
-            actionButtons
+            .padding()
         }
-        .padding()
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
