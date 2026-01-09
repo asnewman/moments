@@ -36,7 +36,8 @@ struct ContentView: View {
     @State private var isLoading = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
-    @State private var editingVideoIndex: Int?
+    @State private var isShowingEditor = false
+    @State private var editingVideoIndex: Int = 0
     @State private var previewURL: URL?
     @State private var showingPreview = false
 
@@ -70,21 +71,19 @@ struct ContentView: View {
                     loadingOverlay
                 }
             }
-            .fullScreenCover(item: $editingVideoIndex) { index in
-                if index < videoItems.count {
-                    VideoTrimmerView(
-                        videoURL: videoItems[index].url,
-                        originalDuration: videoItems[index].originalDuration,
-                        trimStart: Binding(
-                            get: { videoItems[index].trimStart },
-                            set: { videoItems[index].trimStart = $0 }
-                        ),
-                        trimEnd: Binding(
-                            get: { videoItems[index].trimEnd },
-                            set: { videoItems[index].trimEnd = $0 }
-                        )
-                    )
-                }
+            .fullScreenCover(isPresented: $isShowingEditor) {
+                VideoTrimmerView(
+                    videoItems: videoItems,
+                    currentIndex: $editingVideoIndex,
+                    onTrimChanged: { index, trimStart, trimEnd in
+                        guard index < videoItems.count else { return }
+                        videoItems[index].trimStart = trimStart
+                        videoItems[index].trimEnd = trimEnd
+                    },
+                    onDelete: { index in
+                        deleteItemFromEditor(at: index)
+                    }
+                )
             }
             .fullScreenCover(isPresented: $showingPreview) {
                 if let url = previewURL {
@@ -132,6 +131,7 @@ struct ContentView: View {
                 ForEach(Array(videoItems.enumerated()), id: \.element.id) { index, item in
                     Button {
                         editingVideoIndex = index
+                        isShowingEditor = true
                     } label: {
                         HStack(spacing: 12) {
                             Text("\(index + 1)")
@@ -377,6 +377,24 @@ struct ContentView: View {
     private func deleteItems(at offsets: IndexSet) {
         videoItems.remove(atOffsets: offsets)
         selectedItems.remove(atOffsets: offsets)
+    }
+
+    private func deleteItemFromEditor(at index: Int) {
+        guard index < videoItems.count else { return }
+
+        videoItems.remove(at: index)
+        if index < selectedItems.count {
+            selectedItems.remove(at: index)
+        }
+
+        // Navigate to appropriate clip or close editor
+        if videoItems.isEmpty {
+            isShowingEditor = false
+        } else if index >= videoItems.count {
+            // Was last item, go to new last item
+            editingVideoIndex = videoItems.count - 1
+        }
+        // Otherwise stay at same index (which now shows the next clip)
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {

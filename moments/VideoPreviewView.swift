@@ -9,9 +9,12 @@ class SequentialPlaybackController: ObservableObject {
     @Published var isPlaying: Bool = false
     @Published var totalProgress: Double = 0
     @Published var isFinished: Bool = false
+    @Published var isLoading: Bool = true
 
     private var clips: [VideoClip] = []
     private var timeObserver: Any?
+    private var clipStartTimes: [CMTime] = []  // Start time of each clip in the composition
+    private var totalDuration: CMTime = .zero
 
     var clipCount: Int {
         clips.count
@@ -21,6 +24,7 @@ class SequentialPlaybackController: ObservableObject {
         self.clips = clips
         currentClipIndex = 0
         isFinished = false
+        isLoading = true
 
         // Configure audio session for playback
         do {
@@ -30,81 +34,201 @@ class SequentialPlaybackController: ObservableObject {
             print("Failed to configure audio session: \(error)")
         }
 
-        loadClip(at: 0)
+        // Build composition asynchronously
+        Task {
+            await buildComposition()
+        }
     }
 
-    private func loadClip(at index: Int) {
-        guard index < clips.count else {
-            isPlaying = false
-            isFinished = true
-            totalProgress = 1.0
+    private func buildComposition() async {
+        guard !clips.isEmpty else {
+            isLoading = false
             return
         }
 
-        let clip = clips[index]
-        let playerItem = AVPlayerItem(url: clip.url)
-        let player = AVPlayer(playerItem: playerItem)
+        do {
+            let composition = AVMutableComposition()
+            guard let compositionVideoTrack = composition.addMutableTrack(
+                withMediaType: .video,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ),
+            let compositionAudioTrack = composition.addMutableTrack(
+                withMediaType: .audio,
+                preferredTrackID: kCMPersistentTrackID_Invalid
+            ) else {
+                print("Failed to create composition tracks")
+                isLoading = false
+                return
+            }
 
-        // Remove existing time observer
-        if let observer = timeObserver, let oldPlayer = currentPlayer {
-            oldPlayer.removeTimeObserver(observer)
-            timeObserver = nil
-        }
+            // First pass: gather info about all videos for render size calculation
+            var segments: [(clip: VideoClip, displaySize: CGSize, naturalSize: CGSize, preferredTransform: CGAffineTransform)] = []
+            for clip in clips {
+                let asset = AVURLAsset(url: clip.url)
+                let videoTracks = try await asset.loadTracks(withMediaType: .video)
+                guard let videoTrack = videoTracks.first else { continue }
 
-        currentPlayer = player
-        setupTimeObserver(for: player, clip: clip)
+                let naturalSize = try await videoTrack.load(.naturalSize)
+                let preferredTransform = try await videoTrack.load(.preferredTransform)
 
-        // Seek to trim start and play
-        let startTime = CMTime(seconds: clip.trimStart, preferredTimescale: 600)
-        if clip.trimStart > 0 {
-            player.seek(to: startTime, toleranceBefore: .zero, toleranceAfter: .zero)
-        }
+                let transformedRect = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
+                let displaySize = CGSize(
+                    width: abs(transformedRect.width),
+                    height: abs(transformedRect.height)
+                )
 
-        if isPlaying {
-            player.play()
+                segments.append((clip, displaySize, naturalSize, preferredTransform))
+            }
+
+            // Determine render size (use the largest dimensions, ensure portrait)
+            var renderWidth: CGFloat = 0
+            var renderHeight: CGFloat = 0
+            for segment in segments {
+                renderWidth = max(renderWidth, segment.displaySize.width)
+                renderHeight = max(renderHeight, segment.displaySize.height)
+            }
+            if renderWidth > renderHeight {
+                swap(&renderWidth, &renderHeight)
+            }
+            let renderSize = CGSize(width: renderWidth, height: renderHeight)
+
+            // Second pass: build composition
+            var currentTime = CMTime.zero
+            var videoInstructions: [AVMutableVideoCompositionInstruction] = []
+            clipStartTimes = []
+
+            for segment in segments {
+                let asset = AVURLAsset(url: segment.clip.url)
+                let videoTracks = try await asset.loadTracks(withMediaType: .video)
+                let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+
+                let trimStartTime = CMTime(seconds: segment.clip.trimStart, preferredTimescale: 600)
+                let trimEndTime = CMTime(seconds: segment.clip.trimEnd, preferredTimescale: 600)
+                let trimDuration = CMTimeSubtract(trimEndTime, trimStartTime)
+                let timeRange = CMTimeRange(start: trimStartTime, duration: trimDuration)
+
+                // Track when each clip starts in the composition
+                clipStartTimes.append(currentTime)
+
+                if let assetVideoTrack = videoTracks.first {
+                    try compositionVideoTrack.insertTimeRange(timeRange, of: assetVideoTrack, at: currentTime)
+
+                    let transform = calculateTransform(
+                        naturalSize: segment.naturalSize,
+                        preferredTransform: segment.preferredTransform,
+                        displaySize: segment.displaySize,
+                        renderSize: renderSize
+                    )
+
+                    let layerInstruction = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
+                    layerInstruction.setTransform(transform, at: currentTime)
+
+                    let instruction = AVMutableVideoCompositionInstruction()
+                    instruction.timeRange = CMTimeRange(start: currentTime, duration: trimDuration)
+                    instruction.layerInstructions = [layerInstruction]
+                    videoInstructions.append(instruction)
+                }
+
+                if let assetAudioTrack = audioTracks.first {
+                    try? compositionAudioTrack.insertTimeRange(timeRange, of: assetAudioTrack, at: currentTime)
+                }
+
+                currentTime = CMTimeAdd(currentTime, trimDuration)
+            }
+
+            totalDuration = currentTime
+
+            // Create video composition
+            let videoComposition = AVMutableVideoComposition()
+            videoComposition.renderSize = renderSize
+            videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+            videoComposition.instructions = videoInstructions
+
+            // Create player item and player
+            let playerItem = AVPlayerItem(asset: composition)
+            playerItem.videoComposition = videoComposition
+
+            let player = AVPlayer(playerItem: playerItem)
+            currentPlayer = player
+            setupTimeObserver(for: player)
+
+            isLoading = false
+
+            if isPlaying {
+                player.play()
+            }
+
+        } catch {
+            print("Failed to build composition: \(error)")
+            isLoading = false
         }
     }
 
-    private func setupTimeObserver(for player: AVPlayer, clip: VideoClip) {
+    private func calculateTransform(
+        naturalSize: CGSize,
+        preferredTransform: CGAffineTransform,
+        displaySize: CGSize,
+        renderSize: CGSize
+    ) -> CGAffineTransform {
+        let originalRect = CGRect(origin: .zero, size: naturalSize)
+        let transformedRect = originalRect.applying(preferredTransform)
+
+        let scaleX = renderSize.width / displaySize.width
+        let scaleY = renderSize.height / displaySize.height
+        let scale = min(scaleX, scaleY)
+
+        let scaledWidth = displaySize.width * scale
+        let scaledHeight = displaySize.height * scale
+        let offsetX = (renderSize.width - scaledWidth) / 2
+        let offsetY = (renderSize.height - scaledHeight) / 2
+
+        let moveToOrigin = CGAffineTransform(
+            translationX: -transformedRect.origin.x,
+            y: -transformedRect.origin.y
+        )
+
+        let scaleTransform = CGAffineTransform(scaleX: scale, y: scale)
+        let centerTransform = CGAffineTransform(translationX: offsetX, y: offsetY)
+
+        return preferredTransform
+            .concatenating(moveToOrigin)
+            .concatenating(scaleTransform)
+            .concatenating(centerTransform)
+    }
+
+    private func setupTimeObserver(for player: AVPlayer) {
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.05, preferredTimescale: 600),
             queue: .main
         ) { [weak self] time in
             guard let self = self else { return }
 
-            let currentTime = time.seconds
-
-            // Check if we've reached the trim end
-            if currentTime >= clip.trimEnd - 0.05 {
-                self.advanceToNextClip()
-                return
+            // Update total progress
+            if self.totalDuration.seconds > 0 {
+                self.totalProgress = time.seconds / self.totalDuration.seconds
             }
 
-            // Update total progress
-            self.updateTotalProgress(currentTime: currentTime, clip: clip)
+            // Update current clip index based on playback time
+            self.updateCurrentClipIndex(for: time)
+
+            // Check if finished
+            if time.seconds >= self.totalDuration.seconds - 0.05 {
+                self.isFinished = true
+                self.isPlaying = false
+                self.totalProgress = 1.0
+            }
         }
     }
 
-    private func advanceToNextClip() {
-        currentPlayer?.pause()
-
-        // Remove observer before advancing
-        if let observer = timeObserver, let player = currentPlayer {
-            player.removeTimeObserver(observer)
-            timeObserver = nil
+    private func updateCurrentClipIndex(for time: CMTime) {
+        for (index, startTime) in clipStartTimes.enumerated().reversed() {
+            if CMTimeCompare(time, startTime) >= 0 {
+                if currentClipIndex != index {
+                    currentClipIndex = index
+                }
+                break
+            }
         }
-
-        currentClipIndex += 1
-        loadClip(at: currentClipIndex)
-    }
-
-    private func updateTotalProgress(currentTime: Double, clip: VideoClip) {
-        let totalDuration = clips.reduce(0) { $0 + $1.duration }
-        guard totalDuration > 0 else { return }
-
-        let completedDuration = clips.prefix(currentClipIndex).reduce(0) { $0 + $1.duration }
-        let currentClipProgress = max(0, currentTime - clip.trimStart)
-        totalProgress = (completedDuration + currentClipProgress) / totalDuration
     }
 
     func play() {
@@ -125,8 +249,9 @@ class SequentialPlaybackController: ObservableObject {
         isFinished = false
         currentClipIndex = 0
         totalProgress = 0
-        loadClip(at: 0)
+        currentPlayer?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero)
         isPlaying = true
+        currentPlayer?.play()
     }
 
     func cleanup() {
@@ -140,31 +265,19 @@ class SequentialPlaybackController: ObservableObject {
 
     func skipClips(_ count: Int) {
         let newIndex = max(0, min(currentClipIndex + count, clips.count - 1))
-        guard newIndex != currentClipIndex else { return }
-
-        // Stop current playback
-        let wasPlaying = isPlaying
-        currentPlayer?.pause()
-
-        // Remove existing observer
-        if let observer = timeObserver, let player = currentPlayer {
-            player.removeTimeObserver(observer)
-            timeObserver = nil
-        }
+        guard newIndex != currentClipIndex, newIndex < clipStartTimes.count else { return }
 
         currentClipIndex = newIndex
         isFinished = false
-        loadClip(at: newIndex)
 
-        // Resume if was playing
-        if wasPlaying {
-            currentPlayer?.play()
-        }
+        // Seek to the start of the target clip
+        let targetTime = clipStartTimes[newIndex]
+        currentPlayer?.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
 
         // Update progress
-        let totalDuration = clips.reduce(0) { $0 + $1.duration }
-        let completedDuration = clips.prefix(currentClipIndex).reduce(0) { $0 + $1.duration }
-        totalProgress = completedDuration / totalDuration
+        if totalDuration.seconds > 0 {
+            totalProgress = targetTime.seconds / totalDuration.seconds
+        }
     }
 }
 

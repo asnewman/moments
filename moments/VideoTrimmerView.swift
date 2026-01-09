@@ -3,11 +3,20 @@ import AVKit
 import AVFoundation
 
 struct VideoTrimmerView: View {
-    let videoURL: URL
-    let originalDuration: TimeInterval
-    @Binding var trimStart: TimeInterval
-    @Binding var trimEnd: TimeInterval
+    // Video items array for navigation
+    let videoItems: [VideoItem]
+    @Binding var currentIndex: Int
+    let onTrimChanged: (Int, TimeInterval, TimeInterval) -> Void
+    var onDelete: ((Int) -> Void)?
     @Environment(\.dismiss) private var dismiss
+
+    // Computed properties for current clip
+    private var currentItem: VideoItem? {
+        guard currentIndex >= 0 && currentIndex < videoItems.count else { return nil }
+        return videoItems[currentIndex]
+    }
+    private var canGoPrevious: Bool { currentIndex > 0 }
+    private var canGoNext: Bool { currentIndex < videoItems.count - 1 }
 
     @State private var player: AVPlayer?
     @State private var isPlaying = false
@@ -18,8 +27,10 @@ struct VideoTrimmerView: View {
     @State private var isDraggingMiddle = false
     @State private var dragStartTrimStart: TimeInterval = 0
     @State private var dragStartTrimEnd: TimeInterval = 0
-    @State private var originalTrimStart: TimeInterval = 0
-    @State private var originalTrimEnd: TimeInterval = 0
+
+    // Local trim values that sync with the source
+    @State private var localTrimStart: TimeInterval = 0
+    @State private var localTrimEnd: TimeInterval = 0
 
     private let thumbnailCount = 10
 
@@ -34,14 +45,14 @@ struct VideoTrimmerView: View {
                 VStack(spacing: 16) {
                     // Current time display
                     HStack {
-                        Text(formatTime(trimStart))
+                        Text(formatTime(localTrimStart))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
                         Text("Duration: \(formatTime(trimmedDuration))")
                             .font(.caption.bold())
                         Spacer()
-                        Text(formatTime(trimEnd))
+                        Text(formatTime(localTrimEnd))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -63,34 +74,46 @@ struct VideoTrimmerView: View {
                 .background(Color(.systemBackground))
             }
             .background(Color.themeSurface)
-            .navigationTitle("Trim Video")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        // Restore original values
-                        trimStart = originalTrimStart
-                        trimEnd = originalTrimEnd
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
                         dismiss()
                     }
                     .fontWeight(.semibold)
                 }
+                ToolbarItem(placement: .principal) {
+                    clipNavigationControls
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(role: .destructive) {
+                        player?.pause()
+                        onDelete?(currentIndex)
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red)
+                    }
+                    .disabled(videoItems.count <= 1)
+                }
             }
         }
         .onAppear {
-            originalTrimStart = trimStart
-            originalTrimEnd = trimEnd
-            setupPlayer()
-            generateThumbnails()
+            loadCurrentClip()
+        }
+        .onChange(of: currentIndex) { _, _ in
+            loadCurrentClip()
         }
         .onDisappear {
             player?.pause()
         }
+    }
+
+    private func loadCurrentClip() {
+        guard let item = currentItem else { return }
+        localTrimStart = item.trimStart
+        localTrimEnd = item.trimEnd
+        setupPlayer()
+        generateThumbnails()
     }
 
     private var videoPlayerView: some View {
@@ -111,8 +134,9 @@ struct VideoTrimmerView: View {
     private var trimmerTimeline: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let startPosition = (trimStart / originalDuration) * width
-            let endPosition = (trimEnd / originalDuration) * width
+            let duration = currentItem?.originalDuration ?? 1
+            let startPosition = (localTrimStart / duration) * width
+            let endPosition = (localTrimEnd / duration) * width
 
             ZStack(alignment: .leading) {
                 // Thumbnail strip
@@ -157,8 +181,9 @@ struct VideoTrimmerView: View {
                             .onChanged { value in
                                 isDraggingStart = true
                                 let newPosition = max(0, min(value.location.x, endPosition - 20))
-                                trimStart = (newPosition / width) * originalDuration
-                                seekToTime(trimStart)
+                                localTrimStart = (newPosition / width) * duration
+                                onTrimChanged(currentIndex, localTrimStart, localTrimEnd)
+                                seekToTime(localTrimStart)
                             }
                             .onEnded { _ in
                                 isDraggingStart = false
@@ -173,8 +198,9 @@ struct VideoTrimmerView: View {
                             .onChanged { value in
                                 isDraggingEnd = true
                                 let newPosition = max(startPosition + 20, min(value.location.x, width))
-                                trimEnd = (newPosition / width) * originalDuration
-                                seekToTime(trimEnd)
+                                localTrimEnd = (newPosition / width) * duration
+                                onTrimChanged(currentIndex, localTrimStart, localTrimEnd)
+                                seekToTime(localTrimEnd)
                             }
                             .onEnded { _ in
                                 isDraggingEnd = false
@@ -183,7 +209,7 @@ struct VideoTrimmerView: View {
 
                 // Playhead
                 if !isDraggingStart && !isDraggingEnd && !isDraggingMiddle {
-                    let playheadPosition = (currentTime / originalDuration) * width
+                    let playheadPosition = (currentTime / duration) * width
                     Rectangle()
                         .fill(Color.white)
                         .frame(width: 2, height: 60)
@@ -197,10 +223,11 @@ struct VideoTrimmerView: View {
     private var positionSlider: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let trimDuration = trimEnd - trimStart
-            let sliderWidth = max(44, (trimDuration / originalDuration) * width)
+            let duration = currentItem?.originalDuration ?? 1
+            let trimDuration = localTrimEnd - localTrimStart
+            let sliderWidth = max(44, (trimDuration / duration) * width)
             let maxOffset = width - sliderWidth
-            let sliderOffset = (trimStart / (originalDuration - trimDuration)) * maxOffset
+            let sliderOffset = (localTrimStart / (duration - trimDuration)) * maxOffset
 
             ZStack(alignment: .leading) {
                 // Track background
@@ -221,20 +248,20 @@ struct VideoTrimmerView: View {
                             .font(.caption.bold())
                             .foregroundColor(.black)
                     }
-                    .offset(x: trimDuration >= originalDuration ? 0 : sliderOffset)
+                    .offset(x: trimDuration >= duration ? 0 : sliderOffset)
                     .gesture(
                         DragGesture()
                             .onChanged { value in
                                 if !isDraggingMiddle {
                                     isDraggingMiddle = true
-                                    dragStartTrimStart = trimStart
-                                    dragStartTrimEnd = trimEnd
+                                    dragStartTrimStart = localTrimStart
+                                    dragStartTrimEnd = localTrimEnd
                                 }
 
                                 let dragMaxOffset = width - sliderWidth
                                 let deltaX = value.translation.width
                                 let deltaRatio = dragMaxOffset > 0 ? deltaX / dragMaxOffset : 0
-                                let deltaTime = deltaRatio * (originalDuration - trimDuration)
+                                let deltaTime = deltaRatio * (duration - trimDuration)
 
                                 var newStart = dragStartTrimStart + deltaTime
                                 var newEnd = dragStartTrimEnd + deltaTime
@@ -244,14 +271,15 @@ struct VideoTrimmerView: View {
                                     newStart = 0
                                     newEnd = trimDuration
                                 }
-                                if newEnd > originalDuration {
-                                    newEnd = originalDuration
-                                    newStart = originalDuration - trimDuration
+                                if newEnd > duration {
+                                    newEnd = duration
+                                    newStart = duration - trimDuration
                                 }
 
-                                trimStart = newStart
-                                trimEnd = newEnd
-                                seekToTime(trimStart)
+                                localTrimStart = newStart
+                                localTrimEnd = newEnd
+                                onTrimChanged(currentIndex, localTrimStart, localTrimEnd)
+                                seekToTime(localTrimStart)
                             }
                             .onEnded { _ in
                                 isDraggingMiddle = false
@@ -280,7 +308,7 @@ struct VideoTrimmerView: View {
     private var playbackControls: some View {
         HStack(spacing: 40) {
             Button {
-                seekToTime(trimStart)
+                seekToTime(localTrimStart)
             } label: {
                 Image(systemName: "backward.end.fill")
                     .font(.title2)
@@ -290,8 +318,8 @@ struct VideoTrimmerView: View {
                 if isPlaying {
                     player?.pause()
                 } else {
-                    if currentTime >= trimEnd {
-                        seekToTime(trimStart)
+                    if currentTime >= localTrimEnd {
+                        seekToTime(localTrimStart)
                     }
                     player?.play()
                 }
@@ -302,7 +330,7 @@ struct VideoTrimmerView: View {
             }
 
             Button {
-                seekToTime(trimEnd)
+                seekToTime(localTrimEnd)
             } label: {
                 Image(systemName: "forward.end.fill")
                     .font(.title2)
@@ -311,11 +339,44 @@ struct VideoTrimmerView: View {
         .foregroundColor(.primary)
     }
 
+    private var clipNavigationControls: some View {
+        HStack(spacing: 16) {
+            Button {
+                player?.pause()
+                isPlaying = false
+                if canGoPrevious {
+                    currentIndex -= 1
+                }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.headline)
+            }
+            .disabled(!canGoPrevious)
+
+            Text("Clip \(currentIndex + 1) of \(videoItems.count)")
+                .font(.headline)
+
+            Button {
+                player?.pause()
+                isPlaying = false
+                if canGoNext {
+                    currentIndex += 1
+                }
+            } label: {
+                Image(systemName: "chevron.right")
+                    .font(.headline)
+            }
+            .disabled(!canGoNext)
+        }
+    }
+
     private var trimmedDuration: TimeInterval {
-        trimEnd - trimStart
+        localTrimEnd - localTrimStart
     }
 
     private func setupPlayer() {
+        guard let item = currentItem else { return }
+
         // Configure audio session for playback
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .moviePlayback)
@@ -324,20 +385,20 @@ struct VideoTrimmerView: View {
             print("Failed to configure audio session: \(error)")
         }
 
-        let playerItem = AVPlayerItem(url: videoURL)
+        let playerItem = AVPlayerItem(url: item.url)
         player = AVPlayer(playerItem: playerItem)
 
         // Add time observer
-        player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { time in
+        player?.addPeriodicTimeObserver(forInterval: CMTime(seconds: 0.1, preferredTimescale: 600), queue: .main) { [self] time in
             currentTime = time.seconds
 
             // Loop within trim range
-            if currentTime >= trimEnd && isPlaying {
-                seekToTime(trimStart)
+            if currentTime >= localTrimEnd && isPlaying {
+                seekToTime(localTrimStart)
             }
         }
 
-        seekToTime(trimStart)
+        seekToTime(localTrimStart)
     }
 
     private func seekToTime(_ time: TimeInterval) {
@@ -346,13 +407,15 @@ struct VideoTrimmerView: View {
     }
 
     private func generateThumbnails() {
-        let asset = AVURLAsset(url: videoURL)
+        guard let item = currentItem else { return }
+
+        let asset = AVURLAsset(url: item.url)
         let imageGenerator = AVAssetImageGenerator(asset: asset)
         imageGenerator.appliesPreferredTrackTransform = true
         imageGenerator.maximumSize = CGSize(width: 100, height: 100)
 
         var images: [UIImage] = []
-        let interval = originalDuration / Double(thumbnailCount)
+        let interval = item.originalDuration / Double(thumbnailCount)
 
         for i in 0..<thumbnailCount {
             let time = CMTime(seconds: Double(i) * interval, preferredTimescale: 600)

@@ -24,7 +24,8 @@ struct ProjectEditorView: View {
     @State private var isLoading = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
-    @State private var editingVideoIndex: Int?
+    @State private var isShowingEditor = false
+    @State private var editingVideoIndex: Int = 0
     @State private var clipsToPreview: PreviewClips?
     @State private var showingRenameAlert = false
     @State private var newProjectName = ""
@@ -184,27 +185,20 @@ struct ProjectEditorView: View {
                 loadingOverlay
             }
         }
-        .fullScreenCover(item: $editingVideoIndex) { index in
-            if index < videoItems.count {
-                VideoTrimmerView(
-                    videoURL: videoItems[index].url,
-                    originalDuration: videoItems[index].originalDuration,
-                    trimStart: Binding(
-                        get: { videoItems[index].trimStart },
-                        set: { newValue in
-                            videoItems[index].trimStart = newValue
-                            updateClipData(at: index)
-                        }
-                    ),
-                    trimEnd: Binding(
-                        get: { videoItems[index].trimEnd },
-                        set: { newValue in
-                            videoItems[index].trimEnd = newValue
-                            updateClipData(at: index)
-                        }
-                    )
-                )
-            }
+        .fullScreenCover(isPresented: $isShowingEditor) {
+            VideoTrimmerView(
+                videoItems: videoItems,
+                currentIndex: $editingVideoIndex,
+                onTrimChanged: { index, trimStart, trimEnd in
+                    guard index < videoItems.count else { return }
+                    videoItems[index].trimStart = trimStart
+                    videoItems[index].trimEnd = trimEnd
+                    updateClipData(at: index)
+                },
+                onDelete: { index in
+                    deleteItemFromEditor(at: index)
+                }
+            )
         }
         .fullScreenCover(item: $clipsToPreview) { previewData in
             VideoPreviewView(
@@ -278,6 +272,7 @@ struct ProjectEditorView: View {
                 ForEach(Array(videoItems.enumerated()), id: \.element.id) { index, item in
                     Button {
                         editingVideoIndex = index
+                        isShowingEditor = true
                     } label: {
                         if useLargeThumbnails {
                             largeClipRow(index: index, item: item)
@@ -759,6 +754,34 @@ struct ProjectEditorView: View {
             }
         }
         project.modifiedAt = Date()
+    }
+
+    private func deleteItemFromEditor(at index: Int) {
+        guard index < videoItems.count else { return }
+
+        // Delete the item
+        let item = videoItems[index]
+        if let clipIndex = project.clips.firstIndex(where: { $0.assetIdentifier == item.assetIdentifier }) {
+            project.clips.remove(at: clipIndex)
+        }
+        videoItems.remove(at: index)
+
+        // Reindex remaining clips
+        for (i, item) in videoItems.enumerated() {
+            if let clipIndex = project.clips.firstIndex(where: { $0.assetIdentifier == item.assetIdentifier }) {
+                project.clips[clipIndex].orderIndex = i
+            }
+        }
+        project.modifiedAt = Date()
+
+        // Navigate to appropriate clip or close editor
+        if videoItems.isEmpty {
+            isShowingEditor = false
+        } else if index >= videoItems.count {
+            // Was last item, go to new last item
+            editingVideoIndex = videoItems.count - 1
+        }
+        // Otherwise stay at same index (which now shows the next clip)
     }
 
     private func previewVideo() {
