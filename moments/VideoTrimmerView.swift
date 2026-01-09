@@ -103,6 +103,10 @@ struct VideoTrimmerView: View {
         .onChange(of: currentIndex) { _, _ in
             loadCurrentClip()
         }
+        .onChange(of: videoItems.count) { _, _ in
+            // Reload when items are added/deleted
+            loadCurrentClip()
+        }
         .onDisappear {
             player?.pause()
         }
