@@ -93,7 +93,9 @@ class SequentialPlaybackController: ObservableObject {
             let renderSize = CGSize(width: renderWidth, height: renderHeight)
 
             // Second pass: build composition
-            var currentTime = CMTime.zero
+            // Use a high timescale (44100) for audio-accurate timing to prevent A/V drift
+            let compositionTimescale: CMTimeScale = 44100
+            var currentTime = CMTime(value: 0, timescale: compositionTimescale)
             var videoInstructions: [AVMutableVideoCompositionInstruction] = []
             clipStartTimes = []
 
@@ -102,8 +104,8 @@ class SequentialPlaybackController: ObservableObject {
                 let videoTracks = try await asset.loadTracks(withMediaType: .video)
                 let audioTracks = try await asset.loadTracks(withMediaType: .audio)
 
-                let trimStartTime = CMTime(seconds: segment.clip.trimStart, preferredTimescale: 600)
-                let trimEndTime = CMTime(seconds: segment.clip.trimEnd, preferredTimescale: 600)
+                let trimStartTime = CMTime(seconds: segment.clip.trimStart, preferredTimescale: compositionTimescale)
+                let trimEndTime = CMTime(seconds: segment.clip.trimEnd, preferredTimescale: compositionTimescale)
                 let trimDuration = CMTimeSubtract(trimEndTime, trimStartTime)
                 let timeRange = CMTimeRange(start: trimStartTime, duration: trimDuration)
 
@@ -141,7 +143,8 @@ class SequentialPlaybackController: ObservableObject {
             // Create video composition
             let videoComposition = AVMutableVideoComposition()
             videoComposition.renderSize = renderSize
-            videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+            // Use a high-precision frame duration to minimize timing drift
+            videoComposition.frameDuration = CMTime(value: 1471, timescale: 44100)
             videoComposition.instructions = videoInstructions
 
             // Create player item and player

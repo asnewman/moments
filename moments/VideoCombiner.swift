@@ -157,7 +157,9 @@ class VideoCombiner: ObservableObject {
         }
 
         // Second pass: add video segments and create instructions
-        var currentTime = CMTime.zero
+        // Use a high timescale (44100) for audio-accurate timing to prevent A/V drift in long projects
+        let compositionTimescale: CMTimeScale = 44100
+        var currentTime = CMTime(value: 0, timescale: compositionTimescale)
         var videoInstructions: [AVMutableVideoCompositionInstruction] = []
         let totalVideos = Double(segments.count)
 
@@ -166,9 +168,9 @@ class VideoCombiner: ObservableObject {
             let videoTracks = try await asset.loadTracks(withMediaType: .video)
             let audioTracks = try await asset.loadTracks(withMediaType: .audio)
 
-            // Calculate the time range based on trim points
-            let trimStartTime = CMTime(seconds: segment.clip.trimStart, preferredTimescale: 600)
-            let trimEndTime = CMTime(seconds: segment.clip.trimEnd, preferredTimescale: 600)
+            // Calculate the time range based on trim points using high-precision timescale
+            let trimStartTime = CMTime(seconds: segment.clip.trimStart, preferredTimescale: compositionTimescale)
+            let trimEndTime = CMTime(seconds: segment.clip.trimEnd, preferredTimescale: compositionTimescale)
             let trimDuration = CMTimeSubtract(trimEndTime, trimStartTime)
             let timeRange = CMTimeRange(start: trimStartTime, duration: trimDuration)
 
@@ -203,7 +205,9 @@ class VideoCombiner: ObservableObject {
         // Create video composition
         let videoComposition = AVMutableVideoComposition()
         videoComposition.renderSize = renderSize
-        videoComposition.frameDuration = CMTime(value: 1, timescale: 30)
+        // Use a high-precision frame duration to minimize timing drift
+        // 1471/44100 ≈ 1/30 fps but using audio-compatible timescale
+        videoComposition.frameDuration = CMTime(value: 1471, timescale: 44100)
         videoComposition.instructions = videoInstructions
 
         // Export
