@@ -427,7 +427,6 @@ struct ProjectEditorView: View {
                         .foregroundColor(.white)
                         .cornerRadius(12)
                 }
-                .disabled(videoItems.count < 2)
             }
         }
     }
